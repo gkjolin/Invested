@@ -9,7 +9,7 @@ using VolumetricLines;
 public class AllomanticIronSteel : MonoBehaviour {
 
     // Constants
-    private const float AllomanticConstant = 4000;
+    private const float AllomanticConstant = 400;
     private const int maxNumberOfTargets = 10;
     private const float maxRange = 50f;
     private const float closenessThreshold = 1f;
@@ -23,7 +23,7 @@ public class AllomanticIronSteel : MonoBehaviour {
     private const float verticalMax = .8f;
     private const float gMaxLines = .15f;
     private const float bMaxLines = 1;
-    public float luminosityFactor = .5f;
+    private const float luminosityFactor = .4f;
     private const float MetalLinesLerpConstant = burnRateMeterLerpConstant;//.05f;
     private const float verticalImportanceFactor = 100f;
     private const float lightSaberConstant = 200f;
@@ -75,8 +75,8 @@ public class AllomanticIronSteel : MonoBehaviour {
             return transform.TransformPoint(rb.centerOfMass);
         }
     }
-    public float ironBurnRate;
-    public float steelBurnRate;
+    private float ironBurnRate;
+    private float steelBurnRate;
 
     public bool IronPulling { get; private set; }
     public bool SteelPushing { get; private set; }
@@ -102,8 +102,6 @@ public class AllomanticIronSteel : MonoBehaviour {
 
     // Used for calculated the acceleration over the last frame for pushing/pulling
     private Vector3 lastAllomancerVelocity = Vector3.zero;
-    private Vector3 lastExpectedAllomancerAcceleration = Vector3.zero;
-    private Vector3 currentExpectedAllomancerAcceleration = Vector3.zero;
 
     void Start() {
         rb = GetComponent<Rigidbody>();
@@ -290,8 +288,6 @@ public class AllomanticIronSteel : MonoBehaviour {
                 }
             }
             lastAllomancerVelocity = rb.velocity;
-            lastExpectedAllomancerAcceleration = currentExpectedAllomancerAcceleration;
-            currentExpectedAllomancerAcceleration = Vector3.zero;
         }
     }
 
@@ -330,14 +326,14 @@ public class AllomanticIronSteel : MonoBehaviour {
     //}
 
     // Debug
-    public float charge;
+    //public float charge;
     public Vector3 allomanticsForce;
-    public float netAllomancersForce;
-    public float netTargetsForce;
-    public Vector3 resititutionFromTargetsForce;
-    public Vector3 resititutionFromPlayersForce;
-    public float percentOfTargetForceReturned;
-    public float percentOfAllomancerForceReturned;
+    //public float netAllomancersForce;
+    //public float netTargetsForce;
+    public Vector3 targetVelocityChange;
+    public Vector3 allomancerVelocityChange;
+    public Vector3 netImpulse;
+    public float percentOfVelocityForAllomancer;
 
     /* Pushing and Pulling
      * 
@@ -352,54 +348,50 @@ public class AllomanticIronSteel : MonoBehaviour {
         float distance = Mathf.Max(positionDifference.magnitude, closenessThreshold);
 
         Vector3 allomanticForce = AllomanticConstant * (target.LastWasPulled ? ironBurnRate : steelBurnRate) * Mathf.Pow(target.Mass * rb.mass, chargePower) * (positionDifference / distance / distance) / (usingIronTargets ? pullCount : pushCount);
-        Vector3 restitutionForceFromTarget;
-        Vector3 restitutionForceFromAllomancer;
-        if (addNormals) {
-            if (target.IsStatic) {
-                // If the target has no rigidbody, let the let the restitution force equal the allomantic force. It's a perfect anchor.
-                // Thus:
-                // a push against a perfectly anchored metal structure is exactly twice as powerful as a push against a completely unanchored, freely-moving metal structure
-                restitutionForceFromTarget =  allomanticForce;
-                restitutionForceFromAllomancer = Vector3.zero; // irrelevant
-            } else {
+        Vector3 addedChangeInTargetVelocity;
+        Vector3 addedChangeInAllomancerVelocity;
+        //if (true || addNormals) {
                 // Calculate Allomantic Normal Forces
 
-                if (target.IsPerfectlyAnchored) { // If target is perfectly anchored, its ANF = AF.
+        if (target.IsStatic || target.IsPerfectlyAnchored) { // If target is perfectly anchored, its ANF = AF.
+
+            addedChangeInTargetVelocity = Vector3.zero;
+        } else { // Target is partially anchored
+                    //calculate changes from the last frame
+
+            addedChangeInTargetVelocity = allomanticForce / (rb.mass * (lastAllomancerVelocity.magnitude / target.LastVelocity.magnitude) + target.Mass);
+            //restitutionForceFromTarget = Vector3.ClampMagnitude(Vector3.Project(-unaccountedForTargetAcceleration * target.Mass, positionDifference.normalized), allomanticForce.magnitude);
 
 
-
-                    restitutionForceFromTarget = allomanticForce;
-                } else { // Target is partially anchored
-                         //calculate changes from the last frame
-                    Vector3 newTargetVelocity = target.Rb.velocity;
-                    Vector3 lastTargetAcceleration = (newTargetVelocity - target.LastVelocity) / Time.fixedDeltaTime;
-                    Vector3 unaccountedForTargetAcceleration = target.LastExpectedAcceleration - lastTargetAcceleration;// + Physics.gravity;
-                    restitutionForceFromTarget = Vector3.ClampMagnitude(Vector3.Project(-unaccountedForTargetAcceleration * target.Mass, positionDifference.normalized), allomanticForce.magnitude);
-                }
-                Vector3 newAllomancerVelocity = rb.velocity;
-                Vector3 lastAllomancerAcceleration = (newAllomancerVelocity - lastAllomancerVelocity) / Time.fixedDeltaTime;
-                Vector3 unaccountedForAllomancerAcceleration = lastExpectedAllomancerAcceleration - lastAllomancerAcceleration;
-                //if (!movementController.IsGrounded) {
-                //    unaccountedForAllomancerAcceleration += Physics.gravity;
-                //}
-                restitutionForceFromAllomancer = Vector3.ClampMagnitude(Vector3.Project(-unaccountedForAllomancerAcceleration * rb.mass, positionDifference.normalized), allomanticForce.magnitude);
-
-                // using Impulse strategy
-                //restitutionForceFromTarget = Vector3.ClampMagnitude(Vector3.Project(target.forceFromCollisionTotal, positionDifference.normalized), allomanticForce.magnitude);
-
-                target.LastPosition = target.transform.position;
-                target.LastVelocity = target.Rb.velocity;
-            }
-        } else {
-            restitutionForceFromTarget = Vector3.zero;
-            restitutionForceFromAllomancer = Vector3.zero;
         }
+        //if (!movementController.IsGrounded) {
+        //    unaccountedForAllomancerAcceleration += Physics.gravity;
+        //}
+
+
+        addedChangeInAllomancerVelocity = allomanticForce / (target.Mass * (target.LastVelocity.magnitude / lastAllomancerVelocity.magnitude) + rb.mass);
+        //restitutionForceFromAllomancer = Vector3.ClampMagnitude(Vector3.Project(-unaccountedForAllomancerAcceleration * rb.mass, positionDifference.normalized), allomanticForce.magnitude);
+
+
+
+        // using Impulse strategy
+        //restitutionForceFromTarget = Vector3.ClampMagnitude(Vector3.Project(target.forceFromCollisionTotal, positionDifference.normalized), allomanticForce.magnitude);
+
+        target.LastPosition = target.transform.position;
+        target.LastVelocity = target.Rb.velocity;
+        //} else {
+        //}
         target.LastAllomanticForce = allomanticForce;
-        target.LastAllomanticNormalForceFromAllomancer = restitutionForceFromAllomancer;
-        target.LastAllomanticNormalForceFromTarget = restitutionForceFromTarget;
+        target.LastAddedChangeInAllomancerVelocity = addedChangeInAllomancerVelocity;
+        target.LastAddedChangeInTargetVelocity = addedChangeInTargetVelocity;
+        //target.LastAllomanticNormalForceFromAllomancer = restitutionForceFromAllomancer;
+        //target.LastAllomanticNormalForceFromTarget = restitutionForceFromTarget;
 
         // Debug
-        charge = Mathf.Pow(target.Mass, chargePower) * Mathf.Pow(rb.mass, chargePower);
+        targetVelocityChange = addedChangeInTargetVelocity;
+        allomancerVelocityChange = addedChangeInAllomancerVelocity;
+        percentOfVelocityForAllomancer = lastAllomancerVelocity.magnitude / target.LastVelocity.magnitude;
+        //charge = Mathf.Pow(target.Mass, chargePower) * Mathf.Pow(rb.mass, chargePower);
     }
 
     private void AddForce(Magnetic target, bool pulling) {
@@ -421,10 +413,12 @@ public class AllomanticIronSteel : MonoBehaviour {
         Vector3 netForceOnAllomancer = target.LastNetAllomanticForceOnAllomancer;
 
 
-        target.AddForce(netForceOnTarget, ForceMode.Force);
+        target.AddForce(netForceOnTarget, ForceMode.VelocityChange);
+        //target.Rb.AddForce(target.LastAddedChangeInTargetVelocity, ForceMode.VelocityChange);
+        //rb.AddForce(target.LastAddedChangeInAllomancerVelocity, ForceMode.VelocityChange);
 
         // apply force to player
-        rb.AddForce(netForceOnAllomancer, ForceMode.Force);
+        rb.AddForce(netForceOnAllomancer, ForceMode.VelocityChange);
 
         //target.Rb.AddForce(targetVelocity, ForceMode.VelocityChange);
 
@@ -433,18 +427,18 @@ public class AllomanticIronSteel : MonoBehaviour {
         // set up for next frame
         //lastExpectedNormalTargetAcceleration = -restitutionForceFromAllomancer / target.Mass * Time.fixedDeltaTime;
         //lastAllomancerVelocity = rb.velocity;
-        currentExpectedAllomancerAcceleration += netForceOnAllomancer / rb.mass;
 
         //lastExpectedNormalAllomancerAcceleration = restitutionForceFromTarget / rb.mass * Time.fixedDeltaTime;
 
         // Debug
+        netImpulse = target.Mass * target.LastAddedChangeInTargetVelocity + rb.mass * target.LastAddedChangeInAllomancerVelocity;
         allomanticsForce = target.LastAllomanticForce;
-        netAllomancersForce = netForceOnAllomancer.magnitude;
-        resititutionFromTargetsForce = target.LastAllomanticNormalForceFromTarget;
-        resititutionFromPlayersForce = target.LastAllomanticNormalForceFromAllomancer;
-        percentOfTargetForceReturned = resititutionFromTargetsForce.magnitude / allomanticsForce.magnitude;
-        percentOfAllomancerForceReturned = resititutionFromPlayersForce.magnitude / allomanticsForce.magnitude;
-        netTargetsForce = netForceOnTarget.magnitude;
+        //netAllomancersForce = netForceOnAllomancer.magnitude;
+        //resititutionFromTargetsForce = target.LastAllomanticNormalForceFromTarget;
+        //resititutionFromPlayersForce = target.LastAllomanticNormalForceFromAllomancer;
+        //percentOfTargetForceReturned = resititutionFromTargetsForce.magnitude / allomanticsForce.magnitude;
+        //percentOfAllomancerForceReturned = resititutionFromPlayersForce.magnitude / allomanticsForce.magnitude;
+        //netTargetsForce = netForceOnTarget.magnitude;
     }
 
     //private const float additive = 1f / (maxRange + 1f);
@@ -463,7 +457,6 @@ public class AllomanticIronSteel : MonoBehaviour {
         Camera sight = Camera.main;
         float centerestDistanceFromCenter = 1f;
         Magnetic centerestObject = null;
-        int centerestObjectIndex = 0;
         Collider[] nearbyMetals = Physics.OverlapSphere(sight.transform.position, maxRange);
 
         int lines = 0;
@@ -480,7 +473,6 @@ public class AllomanticIronSteel : MonoBehaviour {
                         float distanceFromCenter = verticalImportanceFactor * Mathf.Pow(screenPosition.x - .5f, 2) + Mathf.Pow(screenPosition.y - .5f, 2);
                         if (distanceFromCenter < centerestDistanceFromCenter) {
                             centerestDistanceFromCenter = distanceFromCenter;
-                            centerestObjectIndex = lines;
                             centerestObject = objectToTarget;
                         }
                     }
@@ -595,7 +587,6 @@ public class AllomanticIronSteel : MonoBehaviour {
 
     private void RemoveTarget(int index, bool ironTarget) {
         lastAllomancerVelocity = Vector3.zero;
-        lastExpectedAllomancerAcceleration = Vector3.zero;
 
         if (ironTarget) {
 
@@ -622,7 +613,6 @@ public class AllomanticIronSteel : MonoBehaviour {
 
     public void RemoveTarget(Magnetic target, bool ironTarget, bool searchBoth = false) {
         lastAllomancerVelocity = Vector3.zero;
-        lastExpectedAllomancerAcceleration = Vector3.zero;
 
         if (ironTarget || searchBoth) {
 

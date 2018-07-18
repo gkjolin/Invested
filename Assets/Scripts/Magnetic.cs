@@ -17,11 +17,10 @@ public class Magnetic : MonoBehaviour {
     // Used for calculating Allomantic Normal Force
     public Vector3 LastPosition { get; set; }
     public Vector3 LastVelocity { get; set; }
-    public virtual Vector3 LastExpectedAcceleration { get; set; }
 
     public Vector3 LastAllomanticForce { get; set; }
-    public Vector3 LastAllomanticNormalForceFromAllomancer { get; set; }
-    public Vector3 LastAllomanticNormalForceFromTarget { get; set; }
+    public Vector3 LastAddedChangeInTargetVelocity = Vector3.zero;// { get; set; }
+    public Vector3 LastAddedChangeInAllomancerVelocity = Vector3.zero;// { get; set; }
 
     public float LightSaberFactor { get; set; }
 
@@ -40,9 +39,9 @@ public class Magnetic : MonoBehaviour {
     public Vector3 LastNetAllomanticForceOnAllomancer {
         get {
             if (LastWasPulled) {
-                return LastAllomanticForce + LastAllomanticNormalForceFromTarget;
+                return LastAddedChangeInAllomancerVelocity;
             } else {
-                return (-LastAllomanticForce - LastAllomanticNormalForceFromTarget);
+                return (-LastAddedChangeInAllomancerVelocity);
             }
         }
     }
@@ -50,9 +49,9 @@ public class Magnetic : MonoBehaviour {
     public Vector3 LastNetAllomanticForceOnTarget {
         get {
             if (LastWasPulled) {
-                return -LastAllomanticForce + LastAllomanticNormalForceFromAllomancer;
+                return -LastAddedChangeInTargetVelocity;
             } else {
-                return -(-LastAllomanticForce - LastAllomanticNormalForceFromAllomancer);
+                return -(-LastAddedChangeInTargetVelocity);
             }
         }
     }
@@ -89,10 +88,9 @@ public class Magnetic : MonoBehaviour {
         Rb = GetComponent<Rigidbody>();
         LastPosition = Vector3.zero;
         LastVelocity = Vector3.zero;
-        LastExpectedAcceleration = Vector3.zero;
         LastAllomanticForce = Vector3.zero;
-        LastAllomanticNormalForceFromAllomancer = Vector3.zero;
-        LastAllomanticNormalForceFromTarget = Vector3.zero;
+        LastAddedChangeInTargetVelocity = Vector3.zero;
+        LastAddedChangeInAllomancerVelocity = Vector3.zero;
         LightSaberFactor = 1;
         lastWasPulled = false;
         IsStatic = Rb == null;
@@ -107,24 +105,19 @@ public class Magnetic : MonoBehaviour {
 
     public void Clear() {
         LastVelocity = Vector3.zero;
-        LastExpectedAcceleration = Vector3.zero;
         LastAllomanticForce = Vector3.zero;
-        LastAllomanticNormalForceFromAllomancer = Vector3.zero;
-        LastAllomanticNormalForceFromTarget = Vector3.zero;
+        LastAddedChangeInTargetVelocity = Vector3.zero;
+        LastAddedChangeInAllomancerVelocity = Vector3.zero;
         Allomancer = null;
         LightSaberFactor = 1;
         InRange = false;
     }
 
     public void SoftClear() {
-        LastExpectedAcceleration = Vector3.zero;
-        LastAllomanticNormalForceFromAllomancer = Vector3.zero;
-        LastAllomanticNormalForceFromTarget = Vector3.zero;
     }
 
     public virtual void AddForce(Vector3 force, ForceMode forceMode) {
         if (!IsStatic) {
-            LastExpectedAcceleration = force / mass;
 
             Rb.AddForce(force, forceMode);
         }
